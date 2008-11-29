@@ -15,6 +15,7 @@
 
 __author__ = 'brad@danga.com (Brad Fitzpatrick)'
 
+import models
 
 import cgi
 import wsgiref.handlers
@@ -293,7 +294,18 @@ class AddressBooker(webapp.RequestHandler):
     gdata.alt.appengine.save_auth_tokens({})
 
   def post(self):
-    contacts = simplejson.loads(self.request.get('json'));
+    handle = self.request.get('handle')
+    json = self.request.get('json')
+    group = self.request.get('group')
+    
+    if handle:
+      post_dump = models.PostDump(key_name="handle:" + handle,
+                                  json=json,
+                                  group=group,
+                                  handle=handle)
+      post_dump.put()
+      
+    contacts = simplejson.loads(json)
     #self.response.out.write("You posted: " + pprint.pformat(contacts));
     for contact in contacts:
       self.response.out.write("<br clear='both'><h2>%s</h2>" % contact["name"])
