@@ -48,6 +48,36 @@ import models
 VALID_HANDLE = re.compile(r"^\w+$")
 
 
+def NumberSuffixesMatch(num1, num2):
+  """Given two phone numbers, return bool if they match. 
+
+  Numbers are strings.  A match is 7 matching final
+  numbers, ignoring punctuations and space and stuff.
+  """
+  num1 = re.sub(r"[^\d]", "", num1)
+  num2 = re.sub(r"[^\d]", "", num2)
+  if len(num1) < 6 or len(num2) < 6:
+    return False
+  return num1[-7:] == num2[-7:]
+
+
+def FindEntryToMergeInto(contact, feed):
+  """Finds Entry (or None) in feed to merge contact into."""
+  contact_name = contact["name"]
+  for entry in feed.entry:
+    if entry.title and entry.title.text and \
+       entry.title.text == contact_name:
+      return entry
+      
+    for phone_number in entry.phone_number:
+      google_number = phone_number.text
+      for number_rec in contact["numbers"]:
+        contact_number = number_rec["number"]
+        if NumberSuffixesMatch(google_number, contact_number):
+          return entry
+
+  return None
+
 class AddressBooker(webapp.RequestHandler):
 
   def get(self):
@@ -307,6 +337,9 @@ class MergeGoogle(webapp.RequestHandler):
     if not post_dump:
       raise "State lost?  Um, do it again."
 
+    def out(str):
+      self.response.out.write(str)
+
     user = users.get_current_user()
     logging.info("Current user: " + str(user))
 
@@ -347,33 +380,58 @@ class MergeGoogle(webapp.RequestHandler):
         self.redirect(str(auth_sub_url))
       return
 
-    self.response.out.write("We're good to go.");
+    out("We're good to go.");
     sign_out_url = users.create_logout_url('http://%s/merge/' %
                                           (settings.HOST_NAME))
-    self.response.out.write("\nOr you want to <a href='%s'>log out</a>?" % sign_out_url)
+    out("\nOr you want to <a href='%s'>log out</a>?" % sign_out_url)
+     
 
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
-    self.response.out.write(cgi.escape(str(groups_feed)))
+    out(cgi.escape(str(groups_feed)))
+    groups_feed = gdata.contacts.GroupsFeedFromString(str(groups_feed))
+
+    group_name = {}  # id -> name
+    group_id = {}    # name -> id
+    for group in groups_feed.entry:
+      group_name[group.id] = group.content.text
+      group_id[group.content.text] = group.id
+      out("<h3>Group</h3><ul>")
+      out("<li>id: %s</li>" % group.id)
+      out("<li>content: %s</li>" % cgi.escape(group.content.text))
+      out("</ul>")
 
     full_feed_url = contacts_url + "?max-results=99999"
     feed = client.Get(full_feed_url, converter=gdata.contacts.ContactsFeedFromString)
+
+    for contact in contacts:
+      out("<br clear='both'><h2>%s</h2>" % contact["name"])
+      out("<img src='%s' style='float:left' />" % contact["img"])
+      for number in contact["numbers"]:
+        out("<p><b>%s</b> %s</p>" % (number["type"], number["number"]))
+      merge_entry = FindEntryToMergeInto(contact, feed)
+      if merge_entry:
+        out("<p><b>Action: merge into: </b> %s</p>" % cgi.escape(str(merge_entry)))
+      else:
+        out("<p><b>Action: new Google Contact</b>")
+
+    out("<hr />")
     for entry in feed.entry:
       if entry.title and entry.title.text:
-        self.response.out.write('<h3>Entry Title: %s</h3>' % (
+        out('<h3>Entry Title: %s</h3>' % (
             entry.title.text.decode('UTF-8')))
       else:
-        self.response.out.write("<h3>(title-less entry)</h3>");
+        out("<h3>(title-less entry)</h3>");
       
       for phone_number in entry.phone_number:
-        self.response.out.write("<p><b>Phone: (%s)</b> %s</p>" %
+        out("<p><b>Phone: (%s)</b> %s</p>" %
                                 (phone_number.rel, phone_number.text))
 
       for email in entry.email:
-        self.response.out.write("<p><b>Email: (%s)</b> %s</p>" %
+        out("<p><b>Email: (%s)</b> %s</p>" %
                                 (email.rel, email.address))
 
       for group in entry.group_membership_info:
-        self.response.out.write("<p><b>Group: (%s)</b> %s</p>" %
+        out("<p><b>Group: (%s)</b> %s</p>" %
                                 (group.href, cgi.escape(str(group))))
 
     
