@@ -16,5 +16,8 @@ handlers:
 - url: /step3.*
   script: step3.py
 
+- url: /merge/.*
+  script: addressbooker.py
+
 - url: /.*
   script: feedfetcher.py

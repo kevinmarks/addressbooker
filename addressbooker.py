@@ -1,4 +1,4 @@
-# Copyright (C) 2008 Google Inc.
+# Copyright (C) 2008 Brad Fitzpatrick
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-__author__ = 'api.jscudder (Jeffrey Scudder)'
+__author__ = 'brad@danga.com (Brad Fitzpatrick)'
 
 
 import cgi
@@ -25,38 +25,44 @@ from google.appengine.api import urlfetch
 import urllib # Used to unescape URL parameters.
 import gdata.service
 import gdata.alt.appengine
+import gdata.contacts.service as contactsservice
 import gdata.auth
 import atom
 import atom.http_interface
 import atom.token_store
 import atom.url
 import settings
+import simplejson
+import pprint
 
-
-class Fetcher(webapp.RequestHandler):
+class AddressBooker(webapp.RequestHandler):
 
   def get(self):
     self.response.headers['Content-Type'] = 'text/html'
     
     self.response.out.write("""<!DOCTYPE html><html><head>
-         <title>Google Data Feed Fetcher: read Google Data API Atom feeds
+         <title>AddressBooker: merge contacts into your Google Address Book
          </title>
          <link rel="stylesheet" type="text/css" 
-               href="static/feedfetcher.css"/>
+               href="/static/feedfetcher.css"/>
          </head><body>""")
        
     self.response.out.write("""<div id="nav"><a href="/">Home</a>""")
     if users.get_current_user():
       self.response.out.write('<a href="%s">Sign Out</a>' % (
-          users.create_logout_url('http://%s/' % settings.HOST_NAME)))
+          users.create_logout_url('http://%s/merge/' % settings.HOST_NAME)))
     else:
       self.response.out.write('<a href="%s">Sign In</a>' % (
-          users.create_login_url('http://%s/' % settings.HOST_NAME)))
+          users.create_login_url('http://%s/merge/' % settings.HOST_NAME)))
     self.response.out.write('</div>')
 
     # Initialize a client to talk to Google Data API services.
     client = gdata.service.GDataService()
     gdata.alt.appengine.run_on_appengine(client)
+
+    # And the subclass of the Service for the Contacts API:
+    contacts_client = contactsservice.ContactsService()
+    gdata.alt.appengine.run_on_appengine(contacts_client)
 
     session_token = None
     # Find the AuthSub token and upgrade it to a session token.
@@ -91,7 +97,7 @@ class Fetcher(webapp.RequestHandler):
       checked_string = ''
       
     self.response.out.write("""<div id="wrap"><div id="header">
-          <h1>Google Data Feed Fetcher</h1>
+          <h1>AddressBooker</h1>
           <form action="/" method="get">
           <label id="feed_url_label" for="feed_url">Target URL:</label>
           <input type="text" size="60" name="feed_url" id="feed_url" 
@@ -286,6 +292,16 @@ class Fetcher(webapp.RequestHandler):
   def EraseStoredTokens(self):
     gdata.alt.appengine.save_auth_tokens({})
 
+  def post(self):
+    contacts = simplejson.loads(self.request.get('json'));
+    #self.response.out.write("You posted: " + pprint.pformat(contacts));
+    for contact in contacts:
+      self.response.out.write("<br clear='both'><h2>%s</h2>" % contact["name"])
+      self.response.out.write("<img src='%s' style='float:left' />" % contact["img"])
+      for number in contact["numbers"]:
+        self.response.out.write("<p><b>%s</b> %s</p>" % (
+          number["type"], number["number"]))
+            
 
 class Acker(webapp.RequestHandler):
   """Simulates an HTML page to prove ownership of this domain for AuthSub 
@@ -297,7 +313,7 @@ class Acker(webapp.RequestHandler):
 
 
 def main():
-  application = webapp.WSGIApplication([('/', Fetcher), 
+  application = webapp.WSGIApplication([('/merge/', AddressBooker), 
       ('/google72db3d6838b4c438.html', Acker)], 
       debug=True)
   wsgiref.handlers.CGIHandler().run(application)
