@@ -80,6 +80,34 @@ def FindEntryToMergeInto(contact, feed):
   return None
 
 
+def PhoneRelType(text):
+  """Given some free-formish text, map that to the GData phone rel."""
+  if re.match(r"^\s*(mobile|cell)", text, re.I):
+    return "http://schemas.google.com/g/2005#mobile"
+  if re.match(r"^\s*(work|office)", text, re.I):
+    return "http://schemas.google.com/g/2005#work"
+  if re.match(r"^\s*(house|home)", text, re.I):
+    return "http://schemas.google.com/g/2005#home"
+  return "http://schemas.google.com/g/2005#other"
+
+
+def NewContactEntry(contact, group=None):
+  """Make a new GData Contact Entry from a submitted contact dict."""
+  new_entry = gdata.contacts.ContactEntry()
+  if contact["name"]:
+    new_entry.title = atom.Title(text=contact["name"])
+
+  for number_rec in contact["numbers"]:
+    new_entry.phone_number.append(gdata.contacts.PhoneNumber(
+        rel=PhoneRelType(number_rec["type"]),
+        text=number_rec["number"]))
+
+  if group:
+    new_entry.group_membership_info.append(group)
+
+  return new_entry
+
+
 class Updater(object):
   """Queues up updates and flushes them to gdata batch as needed."""
 
@@ -231,42 +259,45 @@ class MergeGoogle(webapp.RequestHandler):
         self.redirect(str(auth_sub_url))
       return
 
-    out("We're good to go.");
+    out("<p>We're good to go.  %s</p>" % str(session_token));
     sign_out_url = users.create_logout_url('http://%s/merge/' %
                                           (settings.HOST_NAME))
     out("\nOr you want to <a href='%s'>log out</a>?" % sign_out_url)
-     
 
+    # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
-    out(cgi.escape(str(groups_feed)))
     groups_feed = gdata.contacts.GroupsFeedFromString(str(groups_feed))
-
     group_name = {}  # id -> name
     group_id = {}    # name -> id
     for group in groups_feed.entry:
-      group_name[group.id] = group.content.text
-      group_id[group.content.text] = group.id
-      out("<h3>Group</h3><ul>")
-      out("<li>id: %s</li>" % group.id)
-      out("<li>content: %s</li>" % cgi.escape(group.content.text))
-      out("</ul>")
+      group_name[group.id.text] = group.content.text
+      group_id[group.content.text] = group.id.text
+      if True:
+        out("<h3>Group</h3><ul>")
+        out("<li>id: %s</li>" % cgi.escape(group.id.text))
+        out("<li>content: %s</li>" % cgi.escape(group.content.text))
+        out("</ul>")
+
+    dest_group_name = post_dump.group or "AddressBooker"
+    if dest_group_name not in group_id:
+      new_group = gdata.contacts.GroupEntry(title=atom.Title(
+          text=dest_group_name))
+      group = client.CreateGroup(new_group)
+      out("<h3>group: %s</h3>" % group.id)
+      group_name[group.id] = dest_group_name
+      group_id[dest_group_name] = group.id
 
     full_feed_url = contacts_url + "?max-results=99999"
     feed = client.Get(full_feed_url, converter=gdata.contacts.ContactsFeedFromString)
 
     updater = Updater(client=client);
 
-    if True:
-      new_entry = gdata.contacts.ContactEntry()
-      new_entry.title = atom.Title(text="TEST ENTRY " + str(random.randint(1, 100)))
-      new_entry.email.append(gdata.contacts.Email(
-          rel='http://schemas.google.com/g/2005#work', 
-          address='TESTTEST@gmail.com'))
-      new_entry.phone_number.append(gdata.contacts.PhoneNumber(
-          rel='http://schemas.google.com/g/2005#mobile', text='(206)555-1212'))
-      new_entry.content = atom.Content(text='Test Notes')
-      updater.AddInsert(new_entry)
-      updater.Flush()
+      #new_entry.email.append(gdata.contacts.Email(
+      #    rel='http://schemas.google.com/g/2005#work', 
+      #    address='TESTTEST@gmail.com'))
+      #new_entry.content = atom.Content(text='Test Notes')
+
+    group = gdata.contacts.GroupMembershipInfo(href=unicode(group_id[dest_group_name]))
 
     for contact in contacts:
       out("<br clear='both'><h2>%s</h2>" % contact["name"])
@@ -275,29 +306,37 @@ class MergeGoogle(webapp.RequestHandler):
         out("<p><b>%s</b> %s</p>" % (number["type"], number["number"]))
       merge_entry = FindEntryToMergeInto(contact, feed)
       if merge_entry:
-        out("<p><b>Action: merge into: </b> %s</p>" % cgi.escape(str(merge_entry)))
+        out("<p><b>Action: merge into: </b> %s</p>" % cgi.escape(
+            merge_entry.ToString().decode("utf-8")))
+        #UpdateContactEntry(merge_entry, contact)
+        #updater.AddUpdate(merge_entry)
       else:
         out("<p><b>Action: new Google Contact</b>")
+        updater.AddInsert(NewContactEntry(contact, group=group))
 
-    out("<hr />")
-    for entry in feed.entry:
-      if entry.title and entry.title.text:
-        out('<h3>Entry Title: %s</h3>' % (
-            entry.title.text.decode('UTF-8')))
-      else:
-        out("<h3>(title-less entry)</h3>");
+    render_google_list = False
+    if render_google_list:
+      out("<hr />")
+      for entry in feed.entry:
+        if entry.title and entry.title.text:
+          out('<h3>Entry Title: %s</h3>' % (
+              entry.title.text.decode('UTF-8')))
+        else:
+          out("<h3>(title-less entry)</h3>");
       
-      for phone_number in entry.phone_number:
-        out("<p><b>Phone: (%s)</b> %s</p>" %
+        for phone_number in entry.phone_number:
+          out("<p><b>Phone: (%s)</b> %s</p>" %
                                 (phone_number.rel, phone_number.text))
 
-      for email in entry.email:
-        out("<p><b>Email: (%s)</b> %s</p>" %
+        for email in entry.email:
+          out("<p><b>Email: (%s)</b> %s</p>" %
                                 (email.rel, email.address))
 
-      for group in entry.group_membership_info:
-        out("<p><b>Group: (%s)</b> %s</p>" %
-                                (group.href, cgi.escape(str(group))))
+        for group in entry.group_membership_info:
+          out("<p><b>Group: (%s)</b> %s</p>" %
+              (group.href, cgi.escape(str(group))))
+
+    updater.Flush()
 
     
 
