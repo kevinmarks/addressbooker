@@ -397,11 +397,11 @@ class MergeGoogle(AddressBookerBaseHandler):
 
     updater = Updater(client=client, noop_mode=preview_mode);
 
+    no_change_contacts = []
     for contact in contacts:
       contact_change = {
         "contact": contact,
         }
-      contact_changes.append(contact_change)
 
       merge_entry = FindEntryToMergeInto(contact, feed)
       if merge_entry:
@@ -417,6 +417,14 @@ class MergeGoogle(AddressBookerBaseHandler):
         contact_change["action"] = "new"
         contact_change["changes"] = ["Create new contact."]
         updater.AddInsert(NewContactEntry(contact, group=group))
+
+      if contact_change["action"] == "none":
+        no_change_contacts.append(contact_change)
+      else:
+        contact_changes.append(contact_change)
+
+    # Put the boring ones at bottom.
+    contact_changes.extend(no_change_contacts)
 
     render_google_list = False
     if render_google_list:
@@ -446,6 +454,7 @@ class MergeGoogle(AddressBookerBaseHandler):
         "preview_mode": preview_mode,
         "body": "".join(body),
         "session_token": str(session_token),
+        "key": key,
         "changes": contact_changes
         })
     

@@ -1,18 +1,33 @@
 {% if preview_mode %}
-<b>Preview mode.</b>  See if the changes below look good.  If so, press submit at bottom.
-{% endif %}
+<b>Preview mode.</b>  See if the changes below look good.  If so, press the button:</p>
+<form method='POST' style='margin-top: 1em'>
+  <center><input type='submit' value='Do it.' style='font-size: 30pt;' /></center>
+</form>
+{% else %}
 
+<p>All done!  You can <a href='gcontacts?key={{ key|urlencode }}'>go
+back</a> and verify the delta is now zero.  Or go check
+out <a href="http://mail.google.com/mail/contacts/ui/ContactManager">your
+Google Contacts</a>.</p>
+
+  {% endif %}
+
+<center>
 <table cellpadding='5' border='3' style='margin-top: 2em'>
 <tr>
 <td colspan='2'><b>Submitted Contact</b></td>
 <td><b>Action</b></td>
-<td><b>Changes</b></td>
+<td><b>
+   {% if preview_mode %}Proposed {% endif %}Changes
+</b></td>
 </tr>
 {% for change in changes %}
   <tr>
   <td>
     {% if change.contact.img %}
-      <div class='image'><img src="{{ change.contact.img|escape }}" /></div>
+      {% ifnotequal change.action "none" %}
+        <div class='image'><img src="{{ change.contact.img|escape }}" /></div>
+      {% endifnotequal %}
     {% endif %}
   </td>
   <td>
@@ -41,6 +56,7 @@
   </tr>
 {% endfor %}
 </table>
+</center>
 
 {% if body %}
 <hr>
