@@ -1,16 +1,17 @@
 {% if preview_mode %}
-<b>Preview mode.</b>  See if the changes below look good.  If so, press the button:</p>
-<form method='POST' style='margin-top: 1em'>
-  <center><input type='submit' value='Do it.' style='font-size: 30pt;' /></center>
-</form>
+
+  <form method='POST' style='margin-top: 1em' id='submitform'>
+    <center><input type='submit' value='Do it.' style='font-size: 30pt;' /></center>
+  </form>
+
+{% if working %}
+  <b>Updating...</b> {{ n_changes }} remain.  Please wait.
+<script>
+document.getElementById("submitform").submit();
+</script>
 {% else %}
-
-<p>All done!  You can <a href='gcontacts?key={{ key|urlencode }}'>go
-back</a> and verify the delta is now zero.  Or go check
-out <a href="http://mail.google.com/mail/contacts/ui/ContactManager">your
-Google Contacts</a>.</p>
-
-  {% endif %}
+  <b>Preview mode.</b>  See if the <b>{{ n_changes }}</b> changes below look good.  If so, press the button:</p>
+{% endif %}
 
 <center>
 <table cellpadding='5' border='3' style='margin-top: 2em'>
@@ -57,6 +58,15 @@ Google Contacts</a>.</p>
 {% endfor %}
 </table>
 </center>
+
+{% else %}
+
+<p>All done!  You can <a href='gcontacts?key={{ key|urlencode }}'>go
+back</a> and verify the delta is now zero.  Or go check
+out <a href="http://mail.google.com/mail/contacts/ui/ContactManager">your
+Google Contacts</a>.</p>
+
+  {% endif %}
 
 {% if body %}
 <hr>

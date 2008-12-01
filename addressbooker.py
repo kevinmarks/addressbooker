@@ -215,6 +215,9 @@ class Updater(object):
                              gdata.contacts.service.DEFAULT_BATCH_URL)
     self.batch_feed = gdata.contacts.ContactsFeed()
 
+  def FlushBufferEmpty(self):
+    return len(self.batch_feed.entry) == 0
+
 
 class AddressBookerBaseHandler(webapp.RequestHandler):
   def WritePage(self, title, template_file, dict=None):
@@ -393,7 +396,9 @@ class MergeGoogle(AddressBookerBaseHandler):
                                                  secure=False, session=True)
         self.redirect(str(auth_sub_url))
       return
-    
+
+    # Are we a GET request in auto-submit mode?
+    working = (method == "GET" and self.request.get("continue"))
 
     # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
@@ -460,8 +465,15 @@ class MergeGoogle(AddressBookerBaseHandler):
         no_change_contacts.append(contact_change)
       else:
         contact_changes.append(contact_change)
+        if not preview_mode and updater.FlushBufferEmpty():
+          # redirect for the next batch; new HTTP request
+          # to get around App Engine long request deadlines.
+          self.redirect('http://%s/gcontacts?key=%s&continue=1' %
+                        (settings.HOST_NAME, key))
+
 
     # Put the boring ones at bottom.
+    n_changes = len(contact_changes)
     contact_changes.extend(no_change_contacts)
 
     render_google_list = False
@@ -493,7 +505,9 @@ class MergeGoogle(AddressBookerBaseHandler):
         "body": "".join(body),
         "session_token": str(session_token),
         "key": key,
-        "changes": contact_changes
+        "changes": contact_changes,
+        "n_changes": n_changes,
+        "working": working,
         })
     
 
