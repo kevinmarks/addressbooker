@@ -124,6 +124,18 @@ def PhoneRelType(text):
   return "http://schemas.google.com/g/2005#other"
 
 
+def VcardPhoneType(phone_rel):
+  """Given a phone rel type from PhoneRelType, returns the vcard type."""
+  vcard_map = {
+    "http://schemas.google.com/g/2005#mobile": "CELL",
+    "http://schemas.google.com/g/2005#home": "HOME",
+    "http://schemas.google.com/g/2005#work": "WORK",
+  }
+  if phone_rel in vcard_map:
+    return vcard_map[phone_rel]
+  return "OTHER"
+
+
 def NewContactEntry(contact, group=None):
   """Make a new GData Contact Entry from a submitted contact dict.
 
@@ -295,6 +307,32 @@ class MergeView(webapp.RequestHandler):
         # obf_number = re.sub(r"\d{3}$", "<i>xxx</i>", number["number"])
         self.response.out.write("<p><b>%s</b> %s</p>" % (
           cgi.escape(number["type"]), cgi.escape(number["number"])))
+
+
+class VCard(webapp.RequestHandler):
+  """Get a vcard."""
+
+  def get(self):
+    key = self.request.get('key')
+    if not key:
+      raise "Missing argument 'key'"
+    post_dump = models.PostDump.get(db.Key(key))
+    if not post_dump:
+      raise "State lost?  Um, do it again."
+
+    contacts = simplejson.loads(post_dump.json)
+    self.response.headers['Content-Type'] = "text/x-vcard; charset=UTF-8"
+    self.response.headers['Content-Disposition'] = "attachment; filename=\"addressbooker.vcf\""
+
+    for contact in contacts:
+      self.response.out.write("BEGIN:VCARD\n")
+      self.response.out.write("VERSION:3.0\n")
+      self.response.out.write("FN:%s\n" % (contact["name"] or ""))
+      for number in contact["numbers"]:
+        self.response.out.write("TEL;type=%s:%s\n" % (
+            VcardPhoneType(PhoneRelType(number["type"])),
+            number["number"]))
+      self.response.out.write("END:VCARD\n")
 
 
 class MergeGoogle(AddressBookerBaseHandler):
@@ -473,6 +511,7 @@ def main():
     ('/', AddressBooker),
     ('/submit', Submit),
     ('/menu', Menu),
+    ('/vcard', VCard),
     ('/gcontacts', MergeGoogle), 
     ('/view', MergeView), 
     ('/google72db3d6838b4c438.html', Acker),
