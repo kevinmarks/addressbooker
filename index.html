@@ -1,0 +1,35 @@
+<p>... a stupid hack that aims to be be a swiss-army knife for contact
+management, but right now doesn't do very much.</p>
+
+<p>Currently it can just take a submitted form POST w/ JSON contacts
+data and merge that submitted data into your Google Contacts (for use
+in GMail, Android, etc.).</p>
+
+<p>To submit data, do a POST
+to <code>http://addressbooker.appspot.com/submit</code> with the following parameters:</p>
+<blockquote>
+<table border='1' cellpadding='5'>
+<tr valign='top'><td>group</td><td>Optional group name to put contacts in.  Not required.</td></tr>
+<tr valign='top'><td>handle</td><td>Some self-assigned handle for the data you're submitted.  Pick something long and random.  Must match regexp <code>\w+</code>.  This is used if the user isn't logged in and the submitted contacts need to be stashed away with a key for awhile, during the Google sign-in/OAuth/Authsub redirect dance.</td></tr>
+<tr valign='top'><td>json</td><td>Something like: <pre>[
+ {
+   "name": "Brad Fitzpatrick",
+   "numbers": [
+      { "type": "Mobile", "number": "555-1212"},
+      { "type": "Home", "number": "555-1313"},
+   ],
+ },
+ {
+   "name": "Brad Fitzpatrick",
+   "numbers": [
+      { "type": "Mobile", "number": "555-1212"},
+      { "type": "Home", "number": "555-1313"},
+   ],
+ },
+]</pre>(sorry, email addresses not supported yet: just names and numbers.)</td></tr>
+</table>
+</blockquote>
+
+<p>When merging with your Google Contacts, it'll try to smartly merge
+into existing contacts if possible (matching on name, phone number),
+only creating new contacts as a last resort.</p>

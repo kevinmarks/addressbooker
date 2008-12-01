@@ -7,17 +7,5 @@ handlers:
 - url: /static
   static_dir: static
 
-- url: /step1.*
-  script: step1.py
-
-- url: /step2.*
-  script: step2.py
-
-- url: /step3.*
-  script: step3.py
-
-- url: /merge/.*
-  script: addressbooker.py
-
 - url: /.*
-  script: feedfetcher.py
+  script: addressbooker.py

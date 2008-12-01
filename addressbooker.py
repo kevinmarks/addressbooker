@@ -199,27 +199,35 @@ class Updater(object):
     self.batch_feed = gdata.contacts.ContactsFeed()
 
 
-class AddressBooker(webapp.RequestHandler):
+class AddressBookerBaseHandler(webapp.RequestHandler):
+  def WritePage(self, title, template_file, dict=None):
+    sign_inout = ""
+    user = users.get_current_user()
+    if user:
+      sign_inout = 'Hello, %s! <a href="%s">Sign Out</a>' % (
+          cgi.escape(user.nickname()),
+          users.create_logout_url('http://%s/' % settings.HOST_NAME))
+    else:
+      sign_inout = '<a href="%s">Sign In</a>' % (
+        users.create_login_url('http://%s/' % settings.HOST_NAME))
+    
+    self.response.out.write(template.render('page.html', {
+          'title': title or "AddressBooker",
+          'sign_inout': sign_inout,
+          'body': template.render(template_file, dict or {}),
+          }))
+
+class AddressBooker(AddressBookerBaseHandler):
 
   def get(self):
     self.response.headers['Content-Type'] = 'text/html'
-    
-    self.response.out.write("""<!DOCTYPE html><html><head>
-         <title>AddressBooker: merge contacts into your Google Address Book
-         </title>
-         <link rel="stylesheet" type="text/css" 
-               href="/static/feedfetcher.css"/>
-         </head><body>""")
-       
-    self.response.out.write("""<div id="nav"><a href="/">Home</a>""")
-    if users.get_current_user():
-      self.response.out.write('<a href="%s">Sign Out</a>' % (
-          users.create_logout_url('http://%s/merge/' % settings.HOST_NAME)))
-    else:
-      self.response.out.write('<a href="%s">Sign In</a>' % (
-          users.create_login_url('http://%s/merge/' % settings.HOST_NAME)))
-    self.response.out.write('</div>')
+    self.WritePage("AddressBooker", "index.html")
 
+
+class Submit(webapp.RequestHandler):
+
+  def get(self):
+    self.redirect("/")
 
   def post(self):
     handle = self.request.get('handle')
@@ -231,22 +239,37 @@ class AddressBooker(webapp.RequestHandler):
     json = self.request.get('json')
     group = self.request.get('group')
     
-    if handle:
-      post_dump = models.PostDump(key_name="handle:" + handle,
-                                  json=json,
-                                  group=group,
-                                  handle=handle)
-      post_dump.put()
+    post_dump = models.PostDump(key_name="handle:" + handle,
+                                json=json,
+                                group=group,
+                                handle=handle)
+    post_dump.put()
+
+    user = users.get_current_user()
+    target_url = "http://%s/menu?key=%s" % (
+      settings.HOST_NAME, str(post_dump.key()))
+    if user:
+      self.redirect(target_url)
+    else:
+      self.redirect(users.create_login_url(target_url))
+
+
+class Menu(AddressBookerBaseHandler):
+  def get(self):
+    key = self.request.get('key')
+    if not key:
+      raise "Missing argument 'key'"
+    post_dump = models.PostDump.get(db.Key(key))
+    if not post_dump:
+      raise "State lost?  Um, do it again."
       
-    contacts = simplejson.loads(json)
+    contacts = simplejson.loads(post_dump.json)
 
-    self.response.out.write(template.render('now_what.html', {
-      'n_contacts': len(contacts),
-      'handle': str(post_dump.key()),
-    }))
-    
-    #self.response.out.write("You posted: " + pprint.pformat(contacts));
-
+    self.WritePage("AddressBooker Menu", "menu.html", {
+        'n_contacts': len(contacts),
+        'key': str(post_dump.key()),
+        })
+   
 
 class MergeView(webapp.RequestHandler):
   """View the contacts for a given handle."""
@@ -264,12 +287,12 @@ class MergeView(webapp.RequestHandler):
       self.response.out.write("<br clear='both'><h2>%s</h2>" % contact["name"])
       self.response.out.write("<img src='%s' style='float:left' />" % contact["img"])
       for number in contact["numbers"]:
-        obf_number = re.sub(r"\d{3}$", "<i>xxx</i>", number["number"])
+        # obf_number = re.sub(r"\d{3}$", "<i>xxx</i>", number["number"])
         self.response.out.write("<p><b>%s</b> %s</p>" % (
-          number["type"], obf_number))
+          cgi.escape(number["type"]), cgi.escape(number["number"])))
 
 
-class MergeGoogle(webapp.RequestHandler):
+class MergeGoogle(AddressBookerBaseHandler):
   """Merge contacts into Google Contacts w/ Google Contacts API."""
 
   def get(self):
@@ -280,16 +303,15 @@ class MergeGoogle(webapp.RequestHandler):
     if not post_dump:
       raise "State lost?  Um, do it again."
 
+    body = []  # of str
     def out(str):
-      self.response.out.write(str)
-
-    user = users.get_current_user()
-    logging.info("Current user: " + str(user))
+      body.append(str)
 
     # We need a logged-in user for the GData.client.token_store to work.
+    user = users.get_current_user()      
     if not user:
       logging.info("Redirecting to sign-in.");
-      sign_in_url = users.create_login_url('http://%s/merge/google?key=%s' %
+      sign_in_url = users.create_login_url('http://%s/gcontacts?key=%s' %
                                            (settings.HOST_NAME, key))
       self.redirect(sign_in_url)
       return
@@ -314,7 +336,7 @@ class MergeGoogle(webapp.RequestHandler):
         session_token = client.upgrade_to_session_token(auth_token)
         client.token_store.add_token(session_token)
         # just to sanitize our URL:
-        self.redirect('http://%s/merge/google?key=%s' %
+        self.redirect('http://%s/gcontacts?key=%s' %
                       (settings.HOST_NAME, key))
       else:
         next = self.request.uri
@@ -324,9 +346,6 @@ class MergeGoogle(webapp.RequestHandler):
       return
 
     out("<p>We're good to go.  %s</p>" % str(session_token));
-    sign_out_url = users.create_logout_url('http://%s/merge/' %
-                                          (settings.HOST_NAME))
-    out("\nOr you want to <a href='%s'>log out</a>?" % sign_out_url)
 
     # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
@@ -342,21 +361,23 @@ class MergeGoogle(webapp.RequestHandler):
         out("<li>content: %s</li>" % cgi.escape(group.content.text.decode("utf-8")))
         out("</ul>")
 
-    dest_group_name = post_dump.group or "AddressBooker"
-    if dest_group_name not in group_id:
+    # Initialize 'group' (or keep it None, if not using groups), creating the
+    # group if necessary.
+    group = None
+    dest_group_name = post_dump.group
+    if dest_group_name and dest_group_name not in group_id:
       new_group = gdata.contacts.GroupEntry(title=atom.Title(
           text=dest_group_name))
       group = client.CreateGroup(new_group)
-      out("<h3>group: %s</h3>" % group.id)
       group_name[group.id] = dest_group_name
       group_id[dest_group_name] = group.id
+    if dest_group_name:
+      group = gdata.contacts.GroupMembershipInfo(href=unicode(group_id[dest_group_name]))
 
     full_feed_url = contacts_url + "?max-results=99999"
     feed = client.Get(full_feed_url, converter=gdata.contacts.ContactsFeedFromString)
 
     updater = Updater(client=client);
-
-    group = gdata.contacts.GroupMembershipInfo(href=unicode(group_id[dest_group_name]))
 
     for contact in contacts:
       out("<br clear='both'><h2>%s</h2>" % contact["name"])
@@ -404,6 +425,10 @@ class MergeGoogle(webapp.RequestHandler):
 
     updater.Flush()
 
+    title = "GContacts Merge"
+    self.WritePage(title, "google-merge.html", {
+        "body": "".join(body),
+        })
     
 
 class Acker(webapp.RequestHandler):
@@ -417,9 +442,11 @@ class Acker(webapp.RequestHandler):
 
 def main():
   application = webapp.WSGIApplication([
-    ('/merge/', AddressBooker),
-    ('/merge/google', MergeGoogle), 
-    ('/merge/view', MergeView), 
+    ('/', AddressBooker),
+    ('/submit', Submit),
+    ('/menu', Menu),
+    ('/gcontacts', MergeGoogle), 
+    ('/view', MergeView), 
     ('/google72db3d6838b4c438.html', Acker),
     ], debug=True)
   wsgiref.handlers.CGIHandler().run(application)
