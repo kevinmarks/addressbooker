@@ -330,17 +330,16 @@ class MergeGoogle(webapp.RequestHandler):
 
     # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
-    groups_feed = gdata.contacts.GroupsFeedFromString(str(groups_feed))  # TODO: unicode safety
-    #  TODO: something like: groups_feed.ToString().decode("utf-8") ??
+    groups_feed = gdata.contacts.GroupsFeedFromString(groups_feed.ToString().decode("utf-8"))
     group_name = {}  # id -> name
     group_id = {}    # name -> id
     for group in groups_feed.entry:
       group_name[group.id.text] = group.content.text
       group_id[group.content.text] = group.id.text
-      if True:
+      if False:
         out("<h3>Group</h3><ul>")
         out("<li>id: %s</li>" % cgi.escape(group.id.text))
-        out("<li>content: %s</li>" % cgi.escape(group.content.text))
+        out("<li>content: %s</li>" % cgi.escape(group.content.text.decode("utf-8")))
         out("</ul>")
 
     dest_group_name = post_dump.group or "AddressBooker"
