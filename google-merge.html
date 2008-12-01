@@ -1,1 +1,49 @@
+{% if preview_mode %}
+<b>Preview mode.</b>  See if the changes below look good.  If so, press submit at bottom.
+{% endif %}
+
+<table cellpadding='5' border='3' style='margin-top: 2em'>
+<tr>
+<td colspan='2'><b>Submitted Contact</b></td>
+<td><b>Action</b></td>
+<td><b>Changes</b></td>
+</tr>
+{% for change in changes %}
+  <tr>
+  <td>
+    {% if change.contact.img %}
+      <div class='image'><img src="{{ change.contact.img|escape }}" /></div>
+    {% endif %}
+  </td>
+  <td>
+    <div class='name'>{{ change.contact.name|escape }}</div>
+    {% for number in change.contact.numbers %}
+       <div class='number'>
+           <i>{{ number.type|escape }}</i> {{ number.number|escape }}
+       </div>
+    {% endfor %}
+  </td>
+
+  <td>{{ change.action }}
+   {% if change.merge_target %}
+      into <i>{{ change.merge_target|escape }}</i>
+   {% endif %}
+  </td>
+
+  <td>
+    <ul>
+     {% for change in change.changes %}
+       <li>{{ change|escape }}</li>
+     {% endfor %}
+    </ul>
+  </td>
+
+  </tr>
+{% endfor %}
+</table>
+
+{% if body %}
+<hr>
+<h1>Misc output:</h1>
 {{ body }}
+{% endif %}

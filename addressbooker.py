@@ -175,15 +175,20 @@ def UpdateContactEntry(merge_entry, contact, group=None):
 class Updater(object):
   """Queues up updates and flushes them to gdata batch as needed."""
 
-  def __init__(self, client=None):
+  def __init__(self, client=None, noop_mode=False):
     self.client = client
     self.batch_feed = gdata.contacts.ContactsFeed()
+    self.noop_mode = noop_mode
 
   def AddInsert(self, entry):
+    if self.noop_mode:
+      return
     self.batch_feed.AddInsert(entry)
     self.FlushIfNeeded()
 
   def AddUpdate(self, entry):
+    if self.noop_mode:
+      return
     self.batch_feed.AddUpdate(entry)
     self.FlushIfNeeded()
 
@@ -296,6 +301,12 @@ class MergeGoogle(AddressBookerBaseHandler):
   """Merge contacts into Google Contacts w/ Google Contacts API."""
 
   def get(self):
+    self.ProcessMerge(method='GET')
+
+  def post(self):
+    self.ProcessMerge(method='POST')
+
+  def ProcessMerge(self, method):
     key = self.request.get('key')
     if not key:
       raise "Missing argument 'key'"
@@ -344,8 +355,7 @@ class MergeGoogle(AddressBookerBaseHandler):
                                                  secure=False, session=True)
         self.redirect(str(auth_sub_url))
       return
-
-    out("<p>We're good to go.  %s</p>" % str(session_token));
+    
 
     # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
@@ -377,28 +387,35 @@ class MergeGoogle(AddressBookerBaseHandler):
     full_feed_url = contacts_url + "?max-results=99999"
     feed = client.Get(full_feed_url, converter=gdata.contacts.ContactsFeedFromString)
 
-    updater = Updater(client=client);
+    preview_mode = True
+    title = "Preview Proposed GContacts Changes"
+    if method == "POST":
+      preview_mode = False
+      title = "GContacts Updates Complete"
+
+    contact_changes = []
+
+    updater = Updater(client=client, noop_mode=preview_mode);
 
     for contact in contacts:
-      out("<br clear='both'><h2>%s</h2>" % contact["name"])
-      out("<img src='%s' style='float:left' />" % contact["img"])
-      for number in contact["numbers"]:
-        out("<p><b>%s</b> %s</p>" % (number["type"], number["number"]))
+      contact_change = {
+        "contact": contact,
+        }
+      contact_changes.append(contact_change)
+
       merge_entry = FindEntryToMergeInto(contact, feed)
       if merge_entry:
-        changes = UpdateContactEntry(merge_entry, contact, group=group)
-        if changes:
-          out("<p><b>Action: merge</b> into existing Google contact, <i>%s</i></p>" % cgi.escape(
-              merge_entry.title.text.decode("utf-8")))
-          out("<p><b>Applying changes: </b><ul>")
-          for c in changes:
-            out("<li>%s</li>" % cgi.escape(c))
-          out("</ul>")
+        entry_changes = UpdateContactEntry(merge_entry, contact, group=group)
+        if entry_changes:
+          contact_change["action"] = "merge"
+          contact_change["merge_target"] = merge_entry.title.text.decode("utf-8")
+          contact_change["changes"] = entry_changes
           updater.AddUpdate(merge_entry)
         else:
-          out("<p><b>Action: no changes</b>, record already up-to-date.</p>")
+          contact_change["action"] = "none"
       else:
-        out("<p><b>Action: new Google Contact</b>")
+        contact_change["action"] = "new"
+        contact_change["changes"] = ["Create new contact."]
         updater.AddInsert(NewContactEntry(contact, group=group))
 
     render_google_list = False
@@ -425,9 +442,11 @@ class MergeGoogle(AddressBookerBaseHandler):
 
     updater.Flush()
 
-    title = "GContacts Merge"
     self.WritePage(title, "google-merge.html", {
+        "preview_mode": preview_mode,
         "body": "".join(body),
+        "session_token": str(session_token),
+        "changes": contact_changes
         })
     
 
