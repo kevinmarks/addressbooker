@@ -62,6 +62,40 @@ def NumberSuffixesMatch(num1, num2):
   return num1[-7:] == num2[-7:]
 
 
+def PhoneNumberListContainsNumber(number_list, number):
+  """Searches number_list for number.  Returns True if found.
+
+  Args:
+    number_list: list of gdata PhoneNumber
+    number: string phone number.
+    
+  Returns: bool.
+  """
+  for phone_number in number_list:
+    google_number = phone_number.text
+    if NumberSuffixesMatch(google_number, number):
+      return True
+  return False
+
+
+def GroupListContainsGroup(group_list, group):
+  """Returns true if group found in group_list.
+
+  Args:
+    group_list: array of GroupMembershipInfo
+    group: a GroupMembershipInfo
+    
+  Returns: bool.
+  """
+  assert group
+
+  sought_href = group.href
+  for potential_match in group_list:
+    if potential_match.href == sought_href:
+      return True
+  return False
+
+
 def FindEntryToMergeInto(contact, feed):
   """Finds Entry (or None) in feed to merge contact into."""
   contact_name = contact["name"]
@@ -70,12 +104,11 @@ def FindEntryToMergeInto(contact, feed):
        entry.title.text == contact_name:
       return entry
       
-    for phone_number in entry.phone_number:
-      google_number = phone_number.text
-      for number_rec in contact["numbers"]:
-        contact_number = number_rec["number"]
-        if NumberSuffixesMatch(google_number, contact_number):
-          return entry
+    for number_rec in contact["numbers"]:
+      contact_number = number_rec["number"]
+      if PhoneNumberListContainsNumber(entry.phone_number,
+                                       contact_number):
+        return entry
 
   return None
 
@@ -92,21 +125,52 @@ def PhoneRelType(text):
 
 
 def NewContactEntry(contact, group=None):
-  """Make a new GData Contact Entry from a submitted contact dict."""
+  """Make a new GData Contact Entry from a submitted contact dict.
+
+  Returns: The new, populated cgdata.contacts.ContactEntry object.
+  """
   new_entry = gdata.contacts.ContactEntry()
-  if contact["name"]:
-    new_entry.title = atom.Title(text=contact["name"])
-
-  for number_rec in contact["numbers"]:
-    new_entry.phone_number.append(gdata.contacts.PhoneNumber(
-        rel=PhoneRelType(number_rec["type"]),
-        text=number_rec["number"]))
-
-  if group:
-    new_entry.group_membership_info.append(group)
-
+  UpdateContactEntry(new_entry, contact, group)
   return new_entry
 
+
+def UpdateContactEntry(merge_entry, contact, group=None):
+  """Merge user-submitted contact data into GData entry.
+
+  Args:
+    merge_entry: The gdata.contacts.ContactEntry() object to
+      merge into:
+    contact: Input contact dictionary from user w/ fields
+    group: optional GroupMembershipInfo to put user in
+
+  Returns: List of changes (terse English each).  If no changes,
+    returns the empty list, which is false in boolean context.
+  """
+  changes = []
+
+  if contact["name"]:
+    # TODO: promote short names (e.g. "Brad" or "Brad F.") to
+    # full names ("Brad Fitzpatrick").  For now, never modify
+    # the name.
+    if not merge_entry.title or not merge_entry.title.text:
+      changes.append("set name: %s" % contact["name"])
+      merge_entry.title = atom.Title(text=contact["name"])
+
+  for number_rec in contact["numbers"]:
+    if not PhoneNumberListContainsNumber(merge_entry.phone_number,
+                                         number_rec["number"]):
+      changes.append("adding number: %s" % number_rec["number"])
+      merge_entry.phone_number.append(gdata.contacts.PhoneNumber(
+          rel=PhoneRelType(number_rec["type"]),
+          text=number_rec["number"]))
+
+  if group and not GroupListContainsGroup(merge_entry.group_membership_info,
+                                          group):
+    changes.append("adding to group.")
+    merge_entry.group_membership_info.append(group)
+
+  return changes
+  
 
 class Updater(object):
   """Queues up updates and flushes them to gdata batch as needed."""
@@ -266,7 +330,8 @@ class MergeGoogle(webapp.RequestHandler):
 
     # Process Groups
     groups_feed = client.Get("http://www.google.com/m8/feeds/groups/default/full")
-    groups_feed = gdata.contacts.GroupsFeedFromString(str(groups_feed))
+    groups_feed = gdata.contacts.GroupsFeedFromString(str(groups_feed))  # TODO: unicode safety
+    #  TODO: something like: groups_feed.ToString().decode("utf-8") ??
     group_name = {}  # id -> name
     group_id = {}    # name -> id
     for group in groups_feed.entry:
@@ -292,11 +357,6 @@ class MergeGoogle(webapp.RequestHandler):
 
     updater = Updater(client=client);
 
-      #new_entry.email.append(gdata.contacts.Email(
-      #    rel='http://schemas.google.com/g/2005#work', 
-      #    address='TESTTEST@gmail.com'))
-      #new_entry.content = atom.Content(text='Test Notes')
-
     group = gdata.contacts.GroupMembershipInfo(href=unicode(group_id[dest_group_name]))
 
     for contact in contacts:
@@ -306,10 +366,17 @@ class MergeGoogle(webapp.RequestHandler):
         out("<p><b>%s</b> %s</p>" % (number["type"], number["number"]))
       merge_entry = FindEntryToMergeInto(contact, feed)
       if merge_entry:
-        out("<p><b>Action: merge into: </b> %s</p>" % cgi.escape(
-            merge_entry.ToString().decode("utf-8")))
-        #UpdateContactEntry(merge_entry, contact)
-        #updater.AddUpdate(merge_entry)
+        changes = UpdateContactEntry(merge_entry, contact, group=group)
+        if changes:
+          out("<p><b>Action: merge</b> into existing Google contact, <i>%s</i></p>" % cgi.escape(
+              merge_entry.title.text.decode("utf-8")))
+          out("<p><b>Applying changes: </b><ul>")
+          for c in changes:
+            out("<li>%s</li>" % cgi.escape(c))
+          out("</ul>")
+          updater.AddUpdate(merge_entry)
+        else:
+          out("<p><b>Action: no changes</b>, record already up-to-date.</p>")
       else:
         out("<p><b>Action: new Google Contact</b>")
         updater.AddInsert(NewContactEntry(contact, group=group))
