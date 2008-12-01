@@ -205,7 +205,7 @@ class Updater(object):
     self.FlushIfNeeded()
 
   def FlushIfNeeded(self):
-    if len(self.batch_feed.entry) >= 25:   # could be 100 max; 50 timed out sometimes
+    if len(self.batch_feed.entry) >= 15:   # 100 is max but too slow for App Engine
       self.Flush()
 
   def Flush(self):
@@ -470,6 +470,7 @@ class MergeGoogle(AddressBookerBaseHandler):
           # to get around App Engine long request deadlines.
           self.redirect('http://%s/gcontacts?key=%s&continue=1' %
                         (settings.HOST_NAME, key))
+          return
 
 
     # Put the boring ones at bottom.
