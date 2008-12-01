@@ -205,7 +205,7 @@ class Updater(object):
     self.FlushIfNeeded()
 
   def FlushIfNeeded(self):
-    if len(self.batch_feed.entry) >= 50:   # could be 100 max
+    if len(self.batch_feed.entry) >= 25:   # could be 100 max; 50 timed out sometimes
       self.Flush()
 
   def Flush(self):
