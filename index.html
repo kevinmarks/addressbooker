@@ -2,16 +2,18 @@
 management, but right now doesn't do very much.</p>
 
 <p>Currently it can just take a submitted form POST w/ JSON contacts
-data and merge that submitted data into your Google Contacts (for use
-in GMail, Android, etc.).</p>
+data and either export a vCard file (for OS X or whatever), and/or
+merge that submitted data into your Google Contacts (for use in GMail,
+Android, etc.).  See the <a href="http://brad.livejournal.com/2398409.html">announcement blog post</a>.
+</p>
 
 <p>To submit data, do a POST
 to <code>http://addressbooker.appspot.com/submit</code> with the following parameters:</p>
 <blockquote>
-<table border='1' cellpadding='5'>
-<tr valign='top'><td>group</td><td>Optional group name to put contacts in.  Not required.</td></tr>
-<tr valign='top'><td>handle</td><td>Some self-assigned handle for the data you're submitted.  Pick something long and random.  Must match regexp <code>\w+</code>.  This is used if the user isn't logged in and the submitted contacts need to be stashed away with a key for awhile, during the Google sign-in/OAuth/Authsub redirect dance.</td></tr>
-<tr valign='top'><td>json</td><td>Something like: <pre>[
+<table border='1' cellpadding='5' cellspacing='1'>
+<tr valign='top'><td><tt>group</tt></td><td>Optional group name to put contacts in.  Not required.</td></tr>
+<tr valign='top'><td><tt>handle</tt></td><td>Some self-assigned handle for the data you're submitted.  Pick something long and random.  Must match regexp <code>\w+</code>.  This is used if the user isn't logged in and the submitted contacts need to be stashed away with a key for awhile, during the Google sign-in/OAuth/Authsub redirect dance.</td></tr>
+<tr valign='top'><td><tt>json</tt></td><td>Something like: <pre>[
  {
    "name": "Brad Fitzpatrick",
    "numbers": [
@@ -26,10 +28,26 @@ to <code>http://addressbooker.appspot.com/submit</code> with the following param
       { "type": "Home", "number": "555-1313"},
    ],
  },
-]</pre>(sorry, email addresses not supported yet: just names and numbers.)</td></tr>
+]</pre>
+
+<p>(sorry, email addresses not supported yet: just names and numbers.)</p>
+
+<p><b>Note:</b> Joseph Smarr brought to my attention that this should
+be using the <a href="http://portablecontacts.net/">Portable
+Contacts</a> JSON format instead and I agree.  It's a tiny change.
+I'll do that first free chance I get.  Or patches welcome.</p>
+
+</td></tr>
 </table>
 </blockquote>
 
 <p>When merging with your Google Contacts, it'll try to smartly merge
 into existing contacts if possible (matching on name, phone number),
 only creating new contacts as a last resort.</p>
+
+<p>The source code to this whole app is available at:</p><blockquote>
+<a href="http://github.com/bradfitz/addressbooker/tree/master">http://github.com/bradfitz/addressbooker/tree/master</a>
+</blockquote>
+
+<p>Patches welcome!</p>
+
