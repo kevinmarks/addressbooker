@@ -55,6 +55,7 @@ def contactsFromJson(json):
     return contacts.get("entry",[contacts]) 
   except:
     return contacts
+
 def NumberSuffixesMatch(num1, num2):
   """Given two phone numbers, return bool if they match. 
 
@@ -289,10 +290,10 @@ class Menu(AddressBookerBaseHandler):
   def get(self):
     key = self.request.get('key')
     if not key:
-      raise "Missing argument 'key'"
+      self.response.out.write( "Missing argument 'key'")
     post_dump = models.PostDump.get(db.Key(key))
     if not post_dump:
-      raise "State lost?  Um, do it again."
+      self.response.out.write( "State lost?  Um, do it again.")
       
     contacts = contactsFromJson(post_dump.json)
 
