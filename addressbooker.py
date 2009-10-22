@@ -48,7 +48,13 @@ import models
 
 VALID_HANDLE = re.compile(r"^\w+$")
 
-
+def contactsFromJson(json):
+  contacts = simplejson.loads(json)
+  # if it's fully formed PoCo, grab the list out of 'entry', otherwise assume a list
+  try:
+    return contacts.get("entry",[contacts]) 
+  except:
+    return contacts
 def NumberSuffixesMatch(num1, num2):
   """Given two phone numbers, return bool if they match. 
 
@@ -98,14 +104,14 @@ def GroupListContainsGroup(group_list, group):
 
 def FindEntryToMergeInto(contact, feed):
   """Finds Entry (or None) in feed to merge contact into."""
-  contact_name = contact["name"]
+  contact_name = contact["displayName"]
   for entry in feed.entry:
     if entry.title and entry.title.text and \
        entry.title.text == contact_name:
       return entry
       
-    for number_rec in contact["numbers"]:
-      contact_number = number_rec["number"]
+    for number_rec in contact["phoneNumbers"]:
+      contact_number = number_rec["value"]
       if PhoneNumberListContainsNumber(entry.phone_number,
                                        contact_number):
         return entry
@@ -160,21 +166,21 @@ def UpdateContactEntry(merge_entry, contact, group=None):
   """
   changes = []
 
-  if contact["name"]:
+  if contact["displayName"]:
     # TODO: promote short names (e.g. "Brad" or "Brad F.") to
     # full names ("Brad Fitzpatrick").  For now, never modify
     # the name.
     if not merge_entry.title or not merge_entry.title.text:
-      changes.append("set name: %s" % contact["name"])
-      merge_entry.title = atom.Title(text=contact["name"])
+      changes.append("set name: %s" % contact["displayName"])
+      merge_entry.title = atom.Title(text=contact["displayName"])
 
-  for number_rec in contact["numbers"]:
+  for number_rec in contact["phoneNumbers"]:
     if not PhoneNumberListContainsNumber(merge_entry.phone_number,
-                                         number_rec["number"]):
-      changes.append("adding number: %s" % number_rec["number"])
+                                         number_rec["value"]):
+      changes.append("adding number: %s" % number_rec["value"])
       merge_entry.phone_number.append(gdata.contacts.PhoneNumber(
           rel=PhoneRelType(number_rec["type"]),
-          text=number_rec["number"]))
+          text=number_rec["value"]))
 
   if group and not GroupListContainsGroup(merge_entry.group_membership_info,
                                           group):
@@ -243,6 +249,11 @@ class AddressBooker(AddressBookerBaseHandler):
     self.response.headers['Content-Type'] = 'text/html'
     self.WritePage("AddressBooker", "index.html")
 
+class Form(AddressBookerBaseHandler):
+
+  def get(self):
+    self.response.headers['Content-Type'] = 'text/html'
+    self.WritePage("Portable Contacts Form", "pocoform.html")
 
 class Submit(webapp.RequestHandler):
 
@@ -283,7 +294,7 @@ class Menu(AddressBookerBaseHandler):
     if not post_dump:
       raise "State lost?  Um, do it again."
       
-    contacts = simplejson.loads(post_dump.json)
+    contacts = contactsFromJson(post_dump.json)
 
     self.WritePage("AddressBooker Menu", "menu.html", {
         'n_contacts': len(contacts),
@@ -302,14 +313,17 @@ class MergeView(webapp.RequestHandler):
     if not post_dump:
       raise "State lost?  Um, do it again."
 
-    contacts = simplejson.loads(post_dump.json)
+    contacts = contactsFromJson(post_dump.json)
+    self.response.out.write("<ul>")
     for contact in contacts:
-      self.response.out.write("<br clear='both'><h2>%s</h2>" % contact["name"])
-      self.response.out.write("<img src='%s' style='float:left' />" % contact["img"])
-      for number in contact["numbers"]:
-        # obf_number = re.sub(r"\d{3}$", "<i>xxx</i>", number["number"])
-        self.response.out.write("<p><b>%s</b> %s</p>" % (
-          cgi.escape(number["type"]), cgi.escape(number["number"])))
+      self.response.out.write("<li class='vcard'><h2 class='fn'>%s</h2>" % contact.get("displayName",'unknown'))
+      if contact.has_key('img'): self.response.out.write("<img class='photo' src='%s' style='float:left' />" % contact["img"])
+      for number in contact.get("phoneNumbers",[]):
+        # obf_number = re.sub(r"\d{3}$", "<i>xxx</i>", number["value"])
+        self.response.out.write("<dl class='tel'><dt class='type'>%s</dt><dd class='value'>%s</dd></dl>" % (
+          cgi.escape(number["type"]), cgi.escape(number["value"])))
+      self.response.out.write("</li>")
+    self.response.out.write("</ul>")
 
 
 class VCard(webapp.RequestHandler):
@@ -323,18 +337,18 @@ class VCard(webapp.RequestHandler):
     if not post_dump:
       raise "State lost?  Um, do it again."
 
-    contacts = simplejson.loads(post_dump.json)
+    contacts = contactsFromJson(post_dump.json)
     self.response.headers['Content-Type'] = "text/x-vcard; charset=UTF-8"
     self.response.headers['Content-Disposition'] = "attachment; filename=\"addressbooker.vcf\""
 
     for contact in contacts:
       self.response.out.write("BEGIN:VCARD\n")
       self.response.out.write("VERSION:3.0\n")
-      self.response.out.write("FN:%s\n" % (contact["name"] or ""))
-      for number in contact["numbers"]:
+      self.response.out.write("FN:%s\n" % (contact["displayName"] or ""))
+      for number in contact["phoneNumbers"]:
         self.response.out.write("TEL;type=%s:%s\n" % (
             VcardPhoneType(PhoneRelType(number["type"])),
-            number["number"]))
+            number["value"]))
       self.response.out.write("END:VCARD\n")
 
 
@@ -372,7 +386,7 @@ class MergeGoogle(AddressBookerBaseHandler):
     client = contactsservice.ContactsService()
     gdata.alt.appengine.run_on_appengine(client)
 
-    contacts = simplejson.loads(post_dump.json)
+    contacts = contactsFromJson(post_dump.json)
 
     contacts_url = "http://www.google.com/m8/feeds/contacts/default/full"
     auth_base_url = "http://www.google.com/m8/feeds/"
@@ -530,6 +544,7 @@ def main():
     ('/gcontacts', MergeGoogle), 
     ('/view', MergeView), 
     ('/google72db3d6838b4c438.html', Acker),
+    ('/form', Form),
     ], debug=True)
   wsgiref.handlers.CGIHandler().run(application)
 

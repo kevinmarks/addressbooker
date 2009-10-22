@@ -32,10 +32,10 @@ document.getElementById("submitform").submit();
     {% endif %}
   </td>
   <td>
-    <div class='name'>{{ change.contact.name|escape }}</div>
-    {% for number in change.contact.numbers %}
+    <div class='name'>{{ change.contact.displayName|escape }}</div>
+    {% for number in change.contact.phoneNumbers %}
        <div class='number'>
-           <i>{{ number.type|escape }}</i> {{ number.number|escape }}
+           <i>{{ number.type|escape }}</i> {{ number.value|escape }}
        </div>
     {% endfor %}
   </td>
