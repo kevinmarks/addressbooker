@@ -1,0 +1,24 @@
+<form method='POST' target='addressbooker' action='/submit' id='addressbooker'>
+Group:<input type='text' name='group' value='test' ><br>
+<textarea name='json' cols='80' rows='40'>{
+"entry":[
+ {
+   "displayName": "Primus Testington",
+   "phoneNumbers": [
+      { "type": "Mobile", "value": "555-1212" },
+      { "type": "Home", "value": "555-1313" }
+   ]
+ },
+ {
+   "displayName": "Secundus Testington",
+   "phoneNumbers": [
+      { "type": "Mobile", "value": "555-1414"},
+      { "type": "Home", "value": "555-1515"}
+   ]
+ }
+]
+}
+</textarea>
+<input type='hidden' name='handle' value='123456780886' >
+<br><input type='submit' >
+</form>
