@@ -545,7 +545,7 @@ def main():
     ('/gcontacts', MergeGoogle), 
     ('/view', MergeView), 
     ('/google72db3d6838b4c438.html', Acker),
-    ('/form', Form),
+    ('/pocoform', Form),
     ], debug=True)
   wsgiref.handlers.CGIHandler().run(application)
 

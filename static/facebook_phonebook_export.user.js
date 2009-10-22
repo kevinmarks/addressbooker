@@ -24,7 +24,7 @@
   var submitJson = function(json) {
     var div = document.createElement("div");
     document.body.appendChild(div);
-    div.innerHTML = "<form method='POST' target='addressbooker' action='http://addressbooker.appspot.com/submit' id='addressbooker'></form>";
+    div.innerHTML = "<form method='POST' target='addressbooker' action='http://unmung.appspot.com/submit' id='addressbooker'></form>";
     var form = document.getElementById("addressbooker");
     var createField = function(name, value) {
       var field = document.createElement("input");
@@ -129,27 +129,27 @@
       
       // The friend to append to ret.
       var friend = {
-	name: null,
-	numbers: [],
+	displayName: null,
+	phoneNumbers: [],
 	img: null,
       };
 
       // Extract the name.
       var name = xpath(child, "descendant::node()/a[@class='UIObjectListing_Title']/text()");
       if (name.length) {
-	friend.name = name[0].textContent;
+	friend.displayName = name[0].textContent;
       }
 
       // Extract the phone numbers.
       var phoneDivs = xpath(child, "descendant::node()/div[contains(@class,'FriendsPage_PhonebookRight')]");
       if (!phoneDivs.length) {
-	abort("Didn't find phonebook right for: " + friend.name);
+	abort("Didn't find phonebook right for: " + friend.displayName);
       }
       for (var pi = 0; pi < phoneDivs[0].childNodes.length; ++pi) {
 	var phoneDiv = phoneDivs[0].childNodes[pi];
-	friend.numbers.push({
+	friend.phoneNumbers.push({
 	    "type": phoneDiv.childNodes[0].innerHTML,
-	    "number": phoneDiv.childNodes[1].textContent,
+	    "value": phoneDiv.childNodes[1].textContent,
         });
       }
 	
